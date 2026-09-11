@@ -31,7 +31,7 @@
   .qr{background:#fff;border-radius:20px;border:1px solid var(--line);overflow:hidden}
   .qr canvas{height:auto;display:block;image-rendering:pixelated;max-width:100%;margin:0 auto}
   .part{text-align:center;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
-  .video{position:relative;border-radius:20px;overflow:hidden;background:#000;aspect-ratio:3/4}
+  .video{position:relative;border-radius:20px;overflow:hidden;background:#000;aspect-ratio:1}
   .video video{width:100%;height:100%;object-fit:cover;display:block}
   .video .frame{position:absolute;inset:10%;border:3px solid rgba(255,255,255,.85);border-radius:16px}
   .bar{height:12px;border-radius:6px;background:#D5DDE2;overflow:hidden}
@@ -277,20 +277,27 @@ function decodeJsQR(img){
 }
 const cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});
 
-async function scanFrame(){
-  const v=$('video');if(!stream)return;
-  if(!busy&&v.readyState>=2){
-    busy=true;
-    try{
-      if(detector){const codes=await detector.detect(v);for(const c of codes)await handle(c.rawValue)}
-      else{const w=v.videoWidth,h=v.videoHeight,sc=Math.min(1,1000/Math.max(w,h));
-        cv.width=w*sc;cv.height=h*sc;cx.drawImage(v,0,0,cv.width,cv.height);
-        const d=decodeJsQR(cx.getImageData(0,0,cv.width,cv.height));if(d)await handle(d)}
-    }catch(e){}
-    busy=false;
-  }
-  loop=requestAnimationFrame(scanFrame);
+let scanGen=0,lastScan=0;
+function startScan(){
+  const g=++scanGen;
+  const tick=async(t)=>{
+    if(g!==scanGen||!stream)return;                 // этот цикл устарел — выходим
+    const v=$('video');
+    if(!busy&&v.readyState>=2&&t-lastScan>=60){     // не чаще ~16 раз в секунду
+      busy=true;lastScan=t;
+      try{
+        if(detector){const codes=await detector.detect(v);if(g!==scanGen){busy=false;return}for(const c of codes)await handle(c.rawValue)}
+        else{const w=v.videoWidth,h=v.videoHeight,sc=Math.min(1,1000/Math.max(w,h));
+          cv.width=w*sc;cv.height=h*sc;cx.drawImage(v,0,0,cv.width,cv.height);
+          const d=decodeJsQR(cx.getImageData(0,0,cv.width,cv.height));if(d&&g===scanGen)await handle(d)}
+      }catch(e){}
+      busy=false;
+    }
+    if(g===scanGen)loop=requestAnimationFrame(tick);
+  };
+  loop=requestAnimationFrame(tick);
 }
+function stopScan(){scanGen++;cancelAnimationFrame(loop);busy=false}
 /* Выбор камеры: у телефонов с несколькими задними камерами Chrome иногда берёт телеобъектив (x3, x3.5).
    Берём основную (обычно с наименьшим номером), сбрасываем цифровой зум, даём переключить вручную. */
 let backCams=[],camIdx=0;
@@ -312,9 +319,7 @@ async function openStream(deviceId){
 async function attach(st){
   if(stream)stream.getTracks().forEach(t=>t.stop());
   stream=st;const v=$('video');v.srcObject=st;await v.play();
-  if(v.videoWidth&&v.videoHeight)$('videoBox').style.aspectRatio=v.videoWidth+'/'+v.videoHeight;
 }
-$('video').addEventListener('loadedmetadata',e=>{const v=e.target;if(v.videoWidth)$('videoBox').style.aspectRatio=v.videoWidth+'/'+v.videoHeight});
 
 $('cam').onclick=async()=>{
   if(stream){stopCam();return}
@@ -329,25 +334,32 @@ $('cam').onclick=async()=>{
     camIdx=want;
     const curId=stream.getVideoTracks()[0].getSettings().deviceId;
     if(backCams[want]&&backCams[want].deviceId!==curId){
-      try{await attach(await openStream(backCams[want].deviceId))}catch(e){}
+      stream.getTracks().forEach(t=>t.stop());stream=null;
+      try{await attach(await openStream(backCams[want].deviceId))}catch(e){await attach(await openStream(null))}
     }
     show($('videoBox'),true);show($('switchCam'),backCams.length>1);
-    $('cam').textContent='Выключить камеру';scanFrame();
+    $('cam').textContent='Выключить камеру';startScan();
   }catch(e){stopCam();toast('Нет доступа к камере — жми «С фото»')}
 };
+let switching=false;
 $('switchCam').onclick=async()=>{
-  if(!stream||backCams.length<2)return;
-  camIdx=(camIdx+1)%backCams.length;
-  try{
-    cancelAnimationFrame(loop);
-    stream.getTracks().forEach(t=>t.stop());stream=null;
-    await attach(await openStream(backCams[camIdx].deviceId));
-    try{localStorage.setItem('qrCam',backCams[camIdx].deviceId)}catch(e){}
-    toast(`Камера ${camIdx+1} из ${backCams.length} — запомню`);
-    scanFrame();
-  }catch(e){toast('Эта камера не открылась, пробую следующую');$('switchCam').onclick()}
+  if(!stream||backCams.length<2||switching)return;
+  switching=true;$('switchCam').disabled=true;
+  stopScan();
+  stream.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;
+  for(let tries=0;tries<backCams.length;tries++){
+    camIdx=(camIdx+1)%backCams.length;
+    try{
+      await attach(await openStream(backCams[camIdx].deviceId));
+      try{localStorage.setItem('qrCam',backCams[camIdx].deviceId)}catch(e){}
+      toast(`Камера ${camIdx+1} из ${backCams.length} — запомню`);
+      break;
+    }catch(e){}
+  }
+  switching=false;$('switchCam').disabled=false;
+  if(stream)startScan();else{stopCam();toast('Не удалось открыть камеру')}
 };
-function stopCam(){cancelAnimationFrame(loop);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+function stopCam(){stopScan();if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
   show($('videoBox'),false);show($('switchCam'),false);$('cam').textContent='Включить камеру'}
 
 $('photoBtn').onclick=()=>$('photo').click();
