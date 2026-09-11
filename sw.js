@@ -14,18 +14,20 @@ self.addEventListener('activate', e => {
     .then(() => self.clients.claim()));
 });
 
-// «Поделиться» присылает POST с текстом и/или картинками. Сохраняем и открываем приложение.
+// «Поделиться» присылает POST с текстом и/или файлами. Сохраняем и открываем приложение.
 async function handleShare(req) {
   const fd = await req.formData();
   const c = await caches.open(SHARE);
   for (const k of await c.keys()) await c.delete(k);
-  await c.put('./__share/text', new Response(JSON.stringify({
-    title: fd.get('title') || '', text: fd.get('text') || '', url: fd.get('url') || ''
-  })));
+  const meta = { title: fd.get('title') || '', text: fd.get('text') || '', url: fd.get('url') || '', files: [] };
   let i = 0;
-  for (const f of fd.getAll('image')) {
-    if (f && f.size) await c.put('./__share/img' + (i++), new Response(f, { headers: { 'content-type': f.type || 'image/png' } }));
+  for (const f of fd.getAll('files')) {
+    if (!f || !f.size) continue;
+    const key = 'f' + (i++);
+    await c.put('./__share/' + key, new Response(f, { headers: { 'content-type': f.type || 'application/octet-stream' } }));
+    meta.files.push({ key, name: f.name || 'file', type: f.type || 'application/octet-stream' });
   }
+  await c.put('./__share/meta', new Response(JSON.stringify(meta)));
   return Response.redirect(new URL('./?shared=1', self.registration.scope).href, 303);
 }
 

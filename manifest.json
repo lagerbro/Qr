@@ -1,5 +1,5 @@
 {
-  "name": "Передача текста через QR",
+  "name": "Передача через QR",
   "short_name": "QR-передача",
   "start_url": "./",
   "scope": "./",
@@ -30,9 +30,12 @@
       "url": "url",
       "files": [
         {
-          "name": "image",
+          "name": "files",
           "accept": [
-            "image/*"
+            "*/*",
+            "image/*",
+            "application/pdf",
+            "text/*"
           ]
         }
       ]
