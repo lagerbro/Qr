@@ -501,10 +501,10 @@ function showResult(payload,info){
   $('recvStatus').textContent='Готово — получено и проверено';navigator.vibrate?.([60,60,60]);
 }
 // Диагностика камеры: сколько кадров видео пришло, сколько из них проверено, сколько мс уходит на detect, сколько кодов поймано (с повторами)
-const diag={t0:0,frames:0,scans:0,ms:0,codes:0};
-function diagReset(){diag.t0=performance.now();diag.frames=diag.scans=diag.ms=diag.codes=0}
+const diag={t0:0,frames:0,scans:0,ms:0,codes:0,roi:0};
+function diagReset(){diag.t0=performance.now();diag.frames=diag.scans=diag.ms=diag.codes=diag.roi=0}
 function diagText(){const t=(performance.now()-diag.t0)/1000;if(!diag.scans||t<0.5)return'';
-  return` · камера ${fmt(diag.frames/t,0)} кадр/с, проверено ${fmt(diag.scans/t,0)}/с, detect ${fmt(diag.ms/diag.scans,0)} мс, кодов ${fmt(diag.codes/t)}/с`}
+  return` · камера ${fmt(diag.frames/t,0)} кадр/с, проверено ${fmt(diag.scans/t,0)}/с, detect ${fmt(diag.ms/diag.scans,0)} мс, окно ${fmt(diag.roi/diag.scans*100,0)}%, кодов ${fmt(diag.codes/t)}/с`}
 function liveStatus(){const R=D.R;if(!R)return;const t=R.t0?(performance.now()-R.t0)/1000:0;
   $('recvStatus').textContent=`Собрано ${R.rank} из ${R.k} · ${fmt(t)} с${diagText()}`}
 setInterval(()=>{if(D.R&&!finished&&D.R.rank)liveStatus()},250);
@@ -608,8 +608,27 @@ function findMulti(data,w,h,inv,track){ // data портится (закраск
   if(track)tracks=[...found.values()].map(f=>f.box);
   return[...found.keys()]}
 const cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});
+// Встроенный детектор: время detect растёт с числом пикселей (OnePlus 15, 1920×1080, 4 кода — 200–220 мс, замер 11.09.2026).
+// Поэтому с камеры ему отдаём не весь кадр, а область, где коды были в последние 1,5 с, с запасом 25%: пикселей меньше —
+// detect быстрее, а модули не мельчают, потому что режем, а не сжимаем. Три пустых прохода подряд — снова весь кадр.
+let roi=null,roiMiss=0;const seenBoxes=[]; // {x,y,w,h,t}
+async function detectNative(v,w,h){
+  const now=performance.now();let sx=0,sy=0,sw=w,sh=h,src=v;
+  if(roi){({x:sx,y:sy,w:sw,h:sh}=roi);cv.width=sw;cv.height=sh;cx.drawImage(v,sx,sy,sw,sh,0,0,sw,sh);src=cv}
+  let codes;try{codes=await detector.detect(src)}catch(e){codes=[]}
+  diag.roi+=sw*sh/(w*h);
+  if(codes.length){roiMiss=0;for(const c of codes){const b=c.boundingBox;seenBoxes.push({x:sx+b.x,y:sy+b.y,w:b.width,h:b.height,t:now})}}
+  else if(roi&&++roiMiss>=3){roi=null;seenBoxes.length=0}
+  while(seenBoxes.length&&now-seenBoxes[0].t>1500)seenBoxes.shift();
+  if(seenBoxes.length){let x0=Infinity,y0=Infinity,x1=0,y1=0;
+    for(const b of seenBoxes){x0=Math.min(x0,b.x);y0=Math.min(y0,b.y);x1=Math.max(x1,b.x+b.w);y1=Math.max(y1,b.y+b.h)}
+    const mx=(x1-x0)*0.25+20,my=(y1-y0)*0.25+20;
+    x0=Math.max(0,Math.floor(x0-mx));y0=Math.max(0,Math.floor(y0-my));x1=Math.min(w,Math.ceil(x1+mx));y1=Math.min(h,Math.ceil(y1+my));
+    roi={x:x0,y:y0,w:x1-x0,h:y1-y0}}
+  return codes.map(c=>c.rawValue);
+}
 async function detectAll(src,w,h,maxDim,opts={}){
-  if(detector&&!opts.skipDetector){try{return(await detector.detect(src)).map(c=>c.rawValue)}catch(e){return[]}}
+  if(detector&&!opts.skipDetector){if(opts.track)return detectNative(src,w,h);try{return(await detector.detect(src)).map(c=>c.rawValue)}catch(e){return[]}}
   const sc=Math.min(1,maxDim/Math.max(w,h));cv.width=Math.round(w*sc);cv.height=Math.round(h*sc);
   cx.imageSmoothingQuality='high';cx.drawImage(src,0,0,cv.width,cv.height);
   const img=cx.getImageData(0,0,cv.width,cv.height);
@@ -619,11 +638,12 @@ async function detectAll(src,w,h,maxDim,opts={}){
 /* камера: обрабатываем каждый новый кадр видео ровно один раз */
 let scanGen=0;
 function startScan(){
-  const g=++scanGen,v=$('video'),useVFC='requestVideoFrameCallback' in HTMLVideoElement.prototype;tracks=[];diagReset();
+  const g=++scanGen,v=$('video'),useVFC='requestVideoFrameCallback' in HTMLVideoElement.prototype;tracks=[];diagReset();roi=null;seenBoxes.length=0;
   const next=()=>{if(g===scanGen)useVFC?v.requestVideoFrameCallback(tick):requestAnimationFrame(tick)};
-  const tick=async()=>{
+  let frames0=-1;
+  const tick=async(_,meta)=>{
     if(g!==scanGen||!stream)return;
-    diag.frames++;
+    if(meta?.presentedFrames){if(frames0<0)frames0=meta.presentedFrames;diag.frames=meta.presentedFrames-frames0}else diag.frames++; // кадры камеры, а не обороты цикла
     if(!busy&&v.readyState>=2){
       busy=true;const t=performance.now();
       try{const f=await detectAll(v,v.videoWidth,v.videoHeight,1000,{track:true});diag.scans++;diag.ms+=performance.now()-t;diag.codes+=f.length;
