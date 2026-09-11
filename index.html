@@ -4,40 +4,52 @@
 <meta charset="utf-8">
 <title>Передача текста через QR</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1F4FE0">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#1F4FE0">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0E1418">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <style>
-  :root{--bg:#E6EBEE;--paper:#fff;--ink:#16232C;--muted:#5E6E78;--accent:#1F4FE0;--line:#C9D2D8;--ok:#1E8E4E}
+  :root{--bg:#E6EBEE;--paper:#fff;--ink:#16232C;--muted:#5E6E78;--accent:#1F4FE0;--accent-ink:#fff;--line:#C9D2D8;--track:#D5DDE2;--ok:#1E8E4E;--warn:#B3261E}
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#0E1418;--paper:#18222A;--ink:#E4ECF1;--muted:#8C9DA8;--accent:#5B7FFF;--accent-ink:#fff;--line:#2A3842;--track:#222E36;--ok:#34B26A;--warn:#FF7A70}
+  }
   *{box-sizing:border-box}
   html,body{overflow-x:hidden}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Roboto","Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent}
   main{width:100%;max-width:440px;margin:0 auto;padding:14px 16px 32px;display:flex;flex-direction:column;gap:12px}
   section{display:flex;flex-direction:column;gap:12px}
-  .tabs{display:grid;grid-template-columns:1fr 1fr;background:#D5DDE2;border-radius:14px;padding:4px;gap:4px}
+  .tabs{display:grid;grid-template-columns:1fr 1fr;background:var(--track);border-radius:14px;padding:4px;gap:4px}
   .tabs button{border:0;background:transparent;padding:11px;color:var(--muted)}
   .tabs button.on{background:var(--paper);color:var(--ink)}
   button{font:inherit;font-size:16px;font-weight:600;border-radius:14px;padding:14px;cursor:pointer;color:var(--ink);background:var(--paper);border:1px solid var(--line);min-width:0;overflow-wrap:anywhere}
-  button.main{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.main{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
   button:disabled{opacity:.4;cursor:default}
-  button:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-  textarea{width:100%;min-height:140px;resize:vertical;border:1px solid var(--line);border-radius:14px;padding:12px 14px;font:inherit;font-size:16px;color:var(--ink);background:var(--paper)}
-  select{font:inherit;font-size:16px;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--paper);color:var(--ink);width:100%}
-  label{font-size:14px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
-  label b{color:var(--ink)}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  textarea{width:100%;min-height:130px;resize:vertical;border:1px solid var(--line);border-radius:14px;padding:12px 14px;font:inherit;font-size:16px;color:var(--ink);background:var(--paper)}
+  select{font:inherit;font-size:15px;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--paper);color:var(--ink);width:100%}
+  label.field{font-size:14px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+  label.field b{color:var(--ink)}
   input[type=range]{width:100%;accent-color:var(--accent);height:32px}
+  .switch{display:flex;align-items:center;gap:12px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer}
+  .switch input{width:22px;height:22px;accent-color:var(--accent);flex:none;margin:0}
+  .switch .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .switch .t span:first-child{font-weight:600}
+  .switch .t span:last-child{font-size:13px;color:var(--muted)}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .note{font-size:14px;color:var(--muted);line-height:1.45;margin:0 2px}
-  .qr{background:#fff;border-radius:20px;border:1px solid var(--line);overflow:hidden}
-  .qr canvas{height:auto;display:block;image-rendering:pixelated;max-width:100%;margin:0 auto}
-  .part{text-align:center;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+  .qr{background:#fff;border-radius:20px;border:1px solid var(--line);overflow:hidden;display:flex;justify-content:center}
+  .qr canvas{height:auto;display:block;image-rendering:pixelated;max-width:100%}
+  .part{text-align:center;font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
   .video{position:relative;border-radius:20px;overflow:hidden;background:#000;aspect-ratio:1}
   .video video{width:100%;height:100%;object-fit:cover;display:block}
   .video .frame{position:absolute;inset:10%;border:3px solid rgba(255,255,255,.85);border-radius:16px}
-  .bar{height:12px;border-radius:6px;background:#D5DDE2;overflow:hidden}
+  .bar{height:12px;border-radius:6px;background:var(--track);overflow:hidden}
   .bar div{height:100%;width:0;background:var(--ok);transition:width .2s}
+  .stats{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums;margin:0 2px}
+  .bad{color:var(--warn)}
   .hidden{display:none!important}
-  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
   .toast.on{opacity:1}
   @media (prefers-reduced-motion:reduce){.toast,.bar div{transition:none}}
 </style>
@@ -48,13 +60,16 @@
 
   <section id="sendInput">
     <textarea id="txt" placeholder="Текст любой длины"></textarea>
-    <label>Размер одного кода
+    <label class="field">Размер одного кода
       <select id="size">
-        <option value="150">Очень маленький — для плохой камеры</option>
-        <option value="300" selected>Маленький — обычно лучший вариант</option>
-        <option value="600">Средний — меньше кодов, нужна хорошая камера</option>
+        <option value="150">Очень маленький</option>
+        <option value="300" selected>Маленький</option>
+        <option value="600">Средний</option>
       </select>
     </label>
+    <label class="switch"><input type="checkbox" id="two"><span class="t"><span>Два кода на экране</span><span id="twoHint">Вдвое больше за кадр, но коды мельче</span></span></label>
+    <label class="switch"><input type="checkbox" id="color"><span class="t"><span>Цветные коды · эксперимент</span><span id="colorHint">Три кода в одном, нужна хорошая камера</span></span></label>
+    <label class="field"><span>Смена кадра: <b class="speedVal"></b></span><input type="range" class="speed" min="0.15" max="3" step="0.05"></label>
     <p class="note" id="plan">Введи текст</p>
     <button class="main" id="make" disabled>Показать коды</button>
   </section>
@@ -64,9 +79,7 @@
     <div class="qr" id="qrBox"></div>
     <div class="row"><button id="prev">Назад</button><button id="next">Дальше</button></div>
     <button id="auto" class="main">Листать сами</button>
-    <label><span>Смена кода: <b id="speedVal">1,5 с</b></span>
-      <input type="range" id="speed" min="0.5" max="3" step="0.25" value="1.5">
-    </label>
+    <label class="field"><span>Смена кадра: <b class="speedVal"></b></span><input type="range" class="speed" min="0.15" max="3" step="0.05"></label>
     <button id="back">Изменить текст</button>
     <p class="note" id="sendNote"></p>
   </section>
@@ -82,6 +95,7 @@
     </div>
     <input type="file" id="photo" accept="image/*" multiple class="hidden">
     <section id="result" class="hidden">
+      <p class="stats" id="stats"></p>
       <textarea id="out" readonly></textarea>
       <div class="row"><button class="main" id="copy">Скопировать</button><button id="again">Принять ещё</button></div>
     </section>
@@ -94,7 +108,10 @@
 <script>
 /* ===== Ядро: сжатие, Base45, фонтанные коды ===== */
 const enc=new TextEncoder(), dec=new TextDecoder('utf-8');
-const HDR=16;
+const HDR=20,VER=2;
+// Контрольная сумма CRC32 — проверка, что текст собрался без искажений
+const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(u){let c=0xFFFFFFFF;for(let i=0;i<u.length;i++)c=CRC_T[(c^u[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0}
 
 // Base45 — байты в символы режима QR «буквы-цифры» (плотный режим, почти без потерь)
 const B45='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
@@ -130,13 +147,13 @@ async function prepare(text,B){
   if(c&&c.length<raw.length){data=c;flags=1}
   const k=Math.ceil(data.length/B),blocks=[];
   for(let i=0;i<k;i++){const b=new Uint8Array(B);b.set(data.subarray(i*B,(i+1)*B));blocks.push(b)}
-  return{flags,id:(Math.random()*65536)|0,k,B,len:data.length,blocks,ratio:raw.length/data.length}}
+  return{flags,id:(Math.random()*65536)|0,k,B,len:data.length,blocks,ratio:raw.length/data.length,crc:crc32(raw),rawLen:raw.length}}
 
-// Заголовок 16 байт: версия, флаги, id, k, размер куска, длина данных, зерно
+// Заголовок 20 байт: версия, флаги, id, k, размер куска, длина данных, зерно, CRC32 исходного текста
 function packet(S,seed){
   const m=maskFor(seed,S.k,S.id),p=new Uint8Array(HDR+S.B),d=p.subarray(HDR),v=new DataView(p.buffer);
   for(let i=0;i<S.k;i++)if(hasBit(m,i)){const b=S.blocks[i];for(let j=0;j<S.B;j++)d[j]^=b[j]}
-  p[0]=1;p[1]=S.flags;v.setUint16(2,S.id);v.setUint16(4,S.k);v.setUint16(6,S.B);v.setUint32(8,S.len);v.setUint32(12,seed>>>0);
+  p[0]=VER;p[1]=S.flags;v.setUint16(2,S.id);v.setUint16(4,S.k);v.setUint16(6,S.B);v.setUint32(8,S.len);v.setUint32(12,seed>>>0);v.setUint32(16,S.crc);
   return'QF:'+b45enc(p)}
 
 // Сборка у приёмника: метод Гаусса с XOR, пополняется по одному коду
@@ -144,11 +161,11 @@ function newDecoder(){return{R:null}}
 // Возвращает: 'bad' | 'dup' | 'useless' | 'useful' | 'new' (начат новый текст — плюс useful)
 function feed(D,str){
   let p;try{p=b45dec(str.slice(3))}catch(e){return'bad'}
-  if(p.length<HDR||p[0]!==1)return'bad';
-  const v=new DataView(p.buffer),flags=p[1],id=v.getUint16(2),k=v.getUint16(4),B=v.getUint16(6),len=v.getUint32(8),seed=v.getUint32(12);
+  if(p.length<HDR||p[0]!==VER)return'bad';
+  const v=new DataView(p.buffer),flags=p[1],id=v.getUint16(2),k=v.getUint16(4),B=v.getUint16(6),len=v.getUint32(8),seed=v.getUint32(12),crc=v.getUint32(16);
   if(!k||p.length!==HDR+B||len>k*B)return'bad';
   let started=false;
-  if(!D.R||D.R.id!==id||D.R.k!==k||D.R.B!==B){D.R={id,k,B,len,flags,rows:new Array(k),rank:0,seen:new Set(),done:false};started=true}
+  if(!D.R||D.R.id!==id||D.R.k!==k||D.R.B!==B||D.R.crc!==crc){D.R={id,k,B,len,flags,crc,rows:new Array(k),rank:0,seen:new Set(),done:false,t0:0};started=true}
   const R=D.R;
   if(R.done||R.seen.has(seed))return'dup';R.seen.add(seed);
   const m=maskFor(seed,k,id),d=p.slice(HDR);
@@ -165,132 +182,239 @@ async function solve(D){
     for(let q=p+1;q<k;q++)if(hasBit(row.m,q)){const s=R.rows[q].d;for(let j=0;j<B;j++)row.d[j]^=s[j]}}
   const all=new Uint8Array(k*B);for(let i=0;i<k;i++)all.set(R.rows[i].d,i*B);
   let data=all.subarray(0,R.len);if(R.flags&1)data=await decompress(data);
-  return dec.decode(data)}
+  if(crc32(data)!==R.crc)throw new Error('crc');
+  return{text:dec.decode(data),bytes:data.length}}
 
 
 qrcode.stringToBytes=qrcode.stringToBytesFuncs['UTF-8'];
 const $=id=>document.getElementById(id);
-function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2200)}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2400)}
 const show=(el,on)=>el.classList.toggle('hidden',!on);
-const fmt=x=>String(Math.round(x*10)/10).replace('.',',');
+const fmt=(x,d=1)=>{const p=10**d;return String(Math.round(x*p)/p).replace('.',',')};
+const plural=(n,a,b,c)=>{const m=n%10,h=n%100;return m===1&&h!==11?a:(m>=2&&m<=4&&(h<10||h>=20)?b:c)};
+const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 
 /* ---------- вкладки ---------- */
 let S=null;
-$('tabSend').onclick=()=>{$('tabSend').classList.add('on');$('tabRecv').classList.remove('on');stopCam();show($('recv'),false);
-  show(S?$('sendShow'):$('sendInput'),true);if(S)keepAwake()};
-$('tabRecv').onclick=()=>{$('tabRecv').classList.add('on');$('tabSend').classList.remove('on');stopAuto();releaseWake();
-  show($('sendInput'),false);show($('sendShow'),false);show($('recv'),true)};
+function goSend(){$('tabSend').classList.add('on');$('tabRecv').classList.remove('on');stopCam();show($('recv'),false);
+  show(S?$('sendShow'):$('sendInput'),true);if(S)keepAwake()}
+function goRecv(){$('tabRecv').classList.add('on');$('tabSend').classList.remove('on');stopAuto();releaseWake();
+  show($('sendInput'),false);show($('sendShow'),false);show($('recv'),true)}
+$('tabSend').onclick=goSend;$('tabRecv').onclick=goRecv;
+
+/* ---------- настройки ---------- */
+let speed=store.get('qrSpeed',1.5);if(!(speed>=0.15&&speed<=3))speed=1.5;
+$('size').value=String(store.get('qrSize',300));if(!$('size').value)$('size').value='300';
+$('two').checked=store.get('qrTwo',false);$('color').checked=store.get('qrColor',false);
+const perFrame=(two=$('two').checked,color=$('color').checked)=>(two?2:1)*(color?3:1);
+function showSpeed(){document.querySelectorAll('.speed').forEach(r=>r.value=speed);
+  document.querySelectorAll('.speedVal').forEach(b=>b.textContent=fmt(speed,2)+' с')}
+showSpeed();
+document.querySelectorAll('.speed').forEach(r=>r.oninput=e=>{speed=+e.target.value;showSpeed();store.set('qrSpeed',speed);
+  if(autoTimer)startAuto();renderEstimates()});
+
+/* ---------- оценка скорости для каждого варианта ---------- */
+// Сколько кодов нужно поймать: k частей + обычно 1 лишний (при k=1 хватает одного)
+const need=k=>k===1?1:k+1;
+function est(P,N){if(!P||P.plain)return null;const frames=Math.ceil(need(P.k)/N);return{frames,sec:frames*speed,kbs:P.rawLen/1024/(frames*speed)}}
+const estText=e=>e?`≈ ${fmt(e.sec)} с · ${e.frames} ${plural(e.frames,'кадр','кадра','кадров')}`:'';
+let plans={},planSeq=0,planTimer=null;
+const SIZES=[150,300,600],SIZE_NAMES={150:'Очень маленький',300:'Маленький',600:'Средний'};
+async function updatePlans(){
+  const v=$('txt').value,my=++planSeq;$('make').disabled=!v;
+  if(!v){plans={};renderEstimates();return}
+  const res={};for(const B of SIZES)res[B]=await prepare(v,B);
+  if(my!==planSeq)return;plans=res;renderEstimates();
+}
+function renderEstimates(){
+  const B=+$('size').value,P=plans[B],N=perFrame();
+  for(const opt of $('size').options){const Q=plans[+opt.value];
+    opt.textContent=SIZE_NAMES[opt.value]+(Q?(Q.plain?' — один код':` — ${Q.k} ${plural(Q.k,'часть','части','частей')}, ${estText(est(Q,N))}`):'')}
+  const two=$('two').checked,color=$('color').checked;
+  if(P&&!P.plain){
+    const a=est(P,perFrame(!two,color)),b=est(P,perFrame(two,!color));
+    $('twoHint').textContent=(two?'Сейчас включено. Без него: ':'Если включить: ')+estText(a);
+    $('colorHint').textContent=(color?'Сейчас включено. Без него: ':'Если включить: ')+estText(b)+'. Нужна хорошая камера';
+  }else{$('twoHint').textContent='Вдвое больше за кадр, но коды мельче';$('colorHint').textContent='Три кода в одном, нужна хорошая камера'}
+  if(!$('txt').value){$('plan').textContent='Введи текст';return}
+  if(!P){$('plan').textContent='Считаю…';return}
+  if(P.plain){$('plan').textContent='Поместится в один обычный код — прочитает любой сканер';return}
+  const e=est(P,N);
+  $('plan').innerHTML=`Частей: ${P.k}`+(P.flags?`, текст сжат в ${fmt(P.ratio)} раза`:'')+
+    `. В идеале: <b>${fmt(e.sec)} с</b> (${fmt(e.kbs,2)} КБ/с). Реально дольше — камера ловит не каждый кадр, секундомер на приёмнике покажет точно.`+
+    (N>1&&B>=300?' Коды получатся мелкими — держи камеру ближе или выбери размер поменьше.':'');
+}
+$('txt').addEventListener('input',()=>{clearTimeout(planTimer);planTimer=setTimeout(updatePlans,250)});
+$('size').addEventListener('change',()=>{store.set('qrSize',+$('size').value);renderEstimates()});
+$('two').addEventListener('change',()=>{store.set('qrTwo',$('two').checked);renderEstimates()});
+$('color').addEventListener('change',()=>{store.set('qrColor',$('color').checked);renderEstimates()});
+
+/* ---------- отрисовка кадра ---------- */
+function makeQR(str,mode,lvl,type){const q=qrcode(type,lvl);q.addData(str,mode);q.make();return q}
+function qrSet(strs,mode){ // все коды кадра — одной версии, иначе цветные слои не совпадут
+  for(const lvl of['Q','M','L']){
+    try{let qs=strs.map(s=>makeQR(s,mode,lvl,0));
+      const t=Math.max(...qs.map(q=>(q.getModuleCount()-17)/4));
+      return qs.map((q,i)=>(q.getModuleCount()-17)/4===t?q:makeQR(strs[i],mode,lvl,t))}catch(e){}
+  }
+  return null;
+}
+// groups: [[str]] — один код; [[a,b,c]] — цветной; [[a],[b]] — два рядом; [[a,b,c],[d,e,f]] — два цветных
+function drawFrame(groups,mode){
+  const qs=qrSet(groups.flat(),mode);if(!qs)return null;
+  const cells=qs[0].getModuleCount(),q=4,G=groups.length,dpr=window.devicePixelRatio||1;
+  const avail=Math.floor(($('qrBox').clientWidth||360)*dpr);
+  const uw=G*cells+(G+1)*q,uh=cells+2*q,s=Math.max(1,Math.floor(avail/uw)),W=uw*s,H=uh*s;
+  const c=document.createElement('canvas');c.width=W;c.height=H;c.style.width=(W/dpr)+'px';
+  const x=c.getContext('2d'),img=x.createImageData(W,H),d=img.data;d.fill(255);
+  let idx=0;
+  for(let g=0;g<G;g++){
+    const my=qs.slice(idx,idx+groups[g].length);idx+=groups[g].length;
+    const ox=(q+g*(cells+q))*s,oy=q*s;
+    for(let r=0;r<cells;r++)for(let k=0;k<cells;k++){
+      let R,Gc,Bc;
+      if(my.length===1){R=Gc=Bc=my[0].isDark(r,k)?0:255}
+      else{R=my[0].isDark(r,k)?0:255;Gc=my[1].isDark(r,k)?0:255;Bc=my[2].isDark(r,k)?0:255}
+      if(R===255&&Gc===255&&Bc===255)continue;
+      for(let y=0;y<s;y++){let p=((oy+r*s+y)*W+ox+k*s)*4;for(let xx=0;xx<s;xx++,p+=4){d[p]=R;d[p+1]=Gc;d[p+2]=Bc}}
+    }
+  }
+  x.putImageData(img,0,0);return c;
+}
 
 /* ---------- отправка ---------- */
-let cur=0,autoTimer=null,wake=null,planTimer=null,planSeq=0;
-
-async function updatePlan(){
-  const v=$('txt').value,my=++planSeq;$('make').disabled=!v;
-  if(!v){$('plan').textContent='Введи текст';return}
-  const P=await prepare(v,+$('size').value); if(my!==planSeq)return;
-  $('plan').textContent=P.plain?'Поместится в один обычный код — прочитает любой сканер'
-    :`Частей: ${P.k}`+(P.flags?` (текст сжат в ${fmt(P.ratio)} раза)`:'')+`. Приёмнику хватит любых ${P.k}–${P.k+3} кодов из потока.`;
-}
-$('txt').addEventListener('input',()=>{clearTimeout(planTimer);planTimer=setTimeout(updatePlan,200)});
-$('size').addEventListener('change',updatePlan);
-
-function drawQR(str,mode){
-  let qr=null;
-  for(const lvl of['Q','M','L']){try{qr=qrcode(0,lvl);qr.addData(str,mode);qr.make();break}catch(e){qr=null}}
-  if(!qr)return null;
-  const cells=qr.getModuleCount(),q=4,dpr=window.devicePixelRatio||1;
-  const avail=Math.floor(($('qrBox').clientWidth||360)*dpr);
-  const s=Math.max(2,Math.floor(avail/(cells+q*2))),size=(cells+q*2)*s;
-  const c=document.createElement('canvas');c.width=c.height=size;c.style.width=(size/dpr)+'px';
-  const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,size,size);x.fillStyle='#000';
-  for(let r=0;r<cells;r++)for(let k=0;k<cells;k++)if(qr.isDark(r,k))x.fillRect((k+q)*s,(r+q)*s,s,s);
-  return c;
-}
+let cur=0,N=1,C=1,autoTimer=null,wake=null;
 function renderPart(){
   const box=$('qrBox');box.innerHTML='';
-  if(S.plain){box.appendChild(drawQR(S.plain,'Byte'));$('partLabel').textContent='Один код';
-    $('sendNote').textContent='Этот код прочитает и обычная камера телефона.';}
-  else{
-    box.appendChild(drawQR(packet(S,cur),'Alphanumeric'));
-    $('partLabel').textContent=cur<S.k?`Часть ${cur+1} из ${S.k}`:`Доп. код ${cur-S.k+1}`;
-    $('sendNote').textContent=`Выкрути яркость на максимум. Сначала идут ${S.k} частей, дальше — смеси, которые заменяют любую пропущенную. Приёмнику хватит примерно ${S.k}–${S.k+3} любых кодов.`;
-  }
-  const one=!!S.plain||S.k===1;
-  $('prev').disabled=one||cur===0;$('next').disabled=one;$('auto').disabled=one;
+  if(S.plain){box.appendChild(drawFrame([[S.plain]],'Byte'));$('partLabel').textContent='Один код';
+    $('sendNote').textContent='Этот код прочитает и обычная камера телефона.';
+    $('prev').disabled=$('next').disabled=$('auto').disabled=true;return}
+  const groups=[];for(let g=0;g<N/C;g++){const a=[];for(let c=0;c<C;c++)a.push(packet(S,cur+g*C+c));groups.push(a)}
+  box.appendChild(drawFrame(groups,'Alphanumeric'));
+  const frame=cur/N+1,last=Math.min(cur+N,S.k);
+  $('partLabel').textContent=N===1?(cur<S.k?`Часть ${cur+1} из ${S.k}`:`Доп. код ${cur-S.k+1}`)
+    :`Кадр ${frame}`+(cur<S.k?` · части ${cur+1}–${last} из ${S.k}`:' · доп. коды');
+  $('prev').disabled=cur===0;$('next').disabled=false;$('auto').disabled=false;
 }
 $('make').onclick=async()=>{
   $('make').disabled=true;
   S=await prepare($('txt').value,+$('size').value);
-  $('make').disabled=false;cur=0;
+  $('make').disabled=false;cur=0;N=S.plain?1:perFrame();C=$('color').checked?3:1;
+  const e=est(S,N);
+  $('sendNote').textContent=S.plain?'':`Выкрути яркость на максимум. Сначала идут части по порядку, дальше — смеси, которые заменяют любую пропущенную. `+
+    (C===3?'Цветной режим: держи экраны параллельно, без бликов; если не ловится — выключи его. ':'')+`В идеале ${fmt(e.sec)} с.`;
   show($('sendInput'),false);show($('sendShow'),true);renderPart();keepAwake();
 };
-$('prev').onclick=()=>{stopAuto();if(cur>0)cur--;renderPart()};
-$('next').onclick=()=>{stopAuto();cur++;renderPart()};
-$('qrBox').onclick=()=>{if(S&&!S.plain&&S.k>1){stopAuto();cur++;renderPart()}};
+const step=d=>{cur=Math.max(0,cur+d*N);renderPart()};
+$('prev').onclick=()=>{stopAuto();step(-1)};
+$('next').onclick=()=>{stopAuto();step(1)};
+$('qrBox').onclick=()=>{if(S&&!S.plain){stopAuto();step(1)}};
 $('auto').onclick=()=>{if(autoTimer)stopAuto();else{$('auto').textContent='Остановить';startAuto()}};
-function startAuto(){clearInterval(autoTimer);autoTimer=setInterval(()=>{cur++;renderPart()},speed*1000)}
+function startAuto(){clearInterval(autoTimer);autoTimer=setInterval(()=>step(1),speed*1000)}
 function stopAuto(){clearInterval(autoTimer);autoTimer=null;$('auto').textContent='Листать сами'}
-$('back').onclick=()=>{stopAuto();releaseWake();S=null;show($('sendShow'),false);show($('sendInput'),true)};
+$('back').onclick=()=>{stopAuto();releaseWake();S=null;show($('sendShow'),false);show($('sendInput'),true);renderEstimates()};
 async function keepAwake(){try{wake=await navigator.wakeLock?.request('screen')}catch(e){}}
 function releaseWake(){try{wake?.release()}catch(e){}wake=null}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S&&!$('sendShow').classList.contains('hidden'))keepAwake()});
 
-let speed=1.5;
-try{const sv=parseFloat(localStorage.getItem('qrSpeed'));if(sv>=0.5&&sv<=3)speed=sv}catch(e){}
-function showSpeed(){$('speed').value=speed;$('speedVal').textContent=fmt(speed)+' с'}
-showSpeed();
-$('speed').oninput=e=>{speed=+e.target.value;showSpeed();try{localStorage.setItem('qrSpeed',speed)}catch(e){}if(autoTimer)startAuto()};
-
 /* ---------- приём ---------- */
-let D=newDecoder(),stream=null,loop=null,detector=null,busy=false,finished=false;
+let D=newDecoder(),stream=null,loop=null,detector=null,busy=false,finished=false,colorSeen=false,lastColorTry=0;
 if('BarcodeDetector' in window){try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){}}
 
-function resetRecv(){D=newDecoder();finished=false;show($('result'),false);show($('bar'),false);$('barFill').style.width='0';
+function resetRecv(){D=newDecoder();finished=false;colorSeen=false;show($('result'),false);show($('bar'),false);$('barFill').style.width='0';
   $('recvStatus').textContent='Включи камеру и наведи её на коды с другого телефона.'}
-function finish(text){
+function finish(text,info){
   finished=true;stopCam();$('out').value=text;show($('result'),true);
-  $('recvStatus').textContent='Готово — текст собран';navigator.vibrate?.([60,60,60]);
+  $('stats').innerHTML=info||'';
+  $('recvStatus').textContent='Готово — текст собран и проверен';navigator.vibrate?.([60,60,60]);
 }
+function liveStatus(){const R=D.R;if(!R)return;
+  const t=R.t0?(performance.now()-R.t0)/1000:0;
+  $('recvStatus').textContent=`Собрано ${R.rank} из ${R.k} · ${fmt(t)} с`+(colorSeen?' · цветной режим':'')}
+setInterval(()=>{if(D.R&&!finished&&D.R.rank)liveStatus()},250);
+
 async function handle(data){
   if(finished||!data)return;
   if(data.startsWith('QF:')){
     const st=feed(D,data);
-    if(st==='new'&&D.R.rank===1&&D.seenOther)toast('Новый текст — начинаю заново');
+    if(st==='new'&&D.hadOther)toast('Новый текст — начинаю заново');
     if(st==='useful'||st==='new'){
-      D.seenOther=true;const R=D.R;navigator.vibrate?.(30);
-      show($('bar'),true);$('barFill').style.width=(R.rank/R.k*100)+'%';
-      $('recvStatus').textContent=`Собрано ${R.rank} из ${R.k}`;
+      D.hadOther=true;const R=D.R;if(!R.t0)R.t0=performance.now();
+      navigator.vibrate?.(20);show($('bar'),true);$('barFill').style.width=(R.rank/R.k*100)+'%';liveStatus();
       if(R.rank===R.k){
-        $('recvStatus').textContent='Собираю текст…';
-        try{finish(await solve(D))}catch(e){toast('Не удалось распаковать — попробуй ещё раз');resetRecv()}
+        const t=(performance.now()-R.t0)/1000,codes=R.seen.size;
+        $('recvStatus').textContent='Проверяю…';
+        try{const r=await solve(D);
+          finish(r.text,`За ${fmt(t)} с · ${fmt(r.bytes/1024/Math.max(t,0.05),2)} КБ/с · поймано кодов: ${codes}, нужно было ${R.k}`);
+        }catch(e){
+          toast('Текст повреждён при распознавании — принимаю заново');
+          D=newDecoder();$('barFill').style.width='0';
+          $('recvStatus').innerHTML='<span class="bad">Проверка не прошла — какой-то код распознан с ошибкой.</span> Держи камеру дальше, соберу заново.';
+        }
       }
     }
     return;
   }
-  if(!D.R)finish(data);   // обычный QR-код с текстом
+  if(!D.R)finish(data,'Обычный QR-код');
 }
-function decodeJsQR(img){
-  const r=jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
-  if(!r)return null;
-  if(r.data.startsWith('QF:'))return r.data;
-  try{return dec.decode(new Uint8Array(r.binaryData))}catch(e){return r.data}
-}
-const cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});
 
+/* распознавание */
+function resultText(r){if(r.data.startsWith('QF:'))return r.data;try{return dec.decode(new Uint8Array(r.binaryData))}catch(e){return r.data}}
+function scanOnce(data,w,h,max,inv){ // до max кодов: найденный закрашиваем и ищем снова
+  const out=[];
+  for(let n=0;n<max;n++){
+    const r=jsQR(data,w,h,{inversionAttempts:inv||'dontInvert'});if(!r)break;out.push(resultText(r));
+    if(n+1>=max)break;
+    const L=r.location,xs=[L.topLeftCorner.x,L.topRightCorner.x,L.bottomLeftCorner.x,L.bottomRightCorner.x],ys=[L.topLeftCorner.y,L.topRightCorner.y,L.bottomLeftCorner.y,L.bottomRightCorner.y];
+    const x0=Math.max(0,Math.floor(Math.min(...xs))-6),x1=Math.min(w-1,Math.ceil(Math.max(...xs))+6),y0=Math.max(0,Math.floor(Math.min(...ys))-6),y1=Math.min(h-1,Math.ceil(Math.max(...ys))+6);
+    for(let y=y0;y<=y1;y++)data.fill(255,(y*w+x0)*4,(y*w+x1+1)*4);
+  }
+  return out;
+}
+function crop(data,w,h,x0,x1){const cw=x1-x0,o=new Uint8ClampedArray(cw*h*4);for(let y=0;y<h;y++)o.set(data.subarray((y*w+x0)*4,(y*w+x1)*4),y*cw*4);return o}
+function findMulti(data,w,h,max,inv){
+  // jsQR теряется, когда в кадре два кода: тогда ищем отдельно в левой и правой половине
+  const full=scanOnce(new Uint8ClampedArray(data),w,h,max,inv);
+  if(full.length>=max||max<2)return full;
+  const res=new Set(full),hw=w>>1,ov=Math.round(w*0.04);
+  for(const [x0,x1] of [[0,Math.min(w,hw+ov)],[Math.max(0,hw-ov),w]]){
+    for(const t of scanOnce(crop(data,w,h,x0,x1),x1-x0,h,1,inv))res.add(t);
+  }
+  return[...res];
+}
+function channel(img,c){const s=img.data,d=new Uint8ClampedArray(s.length);for(let i=0;i<s.length;i+=4){const v=s[i+c];d[i]=d[i+1]=d[i+2]=v;d[i+3]=255}return d}
+const cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});
+async function detectAll(src,w,h,maxDim,opts={}){
+  const found=[];
+  if(detector&&!opts.skipDetector){try{for(const c of await detector.detect(src))found.push(c.rawValue)}catch(e){}}
+  const needJs=!detector||opts.skipDetector;
+  const now=performance.now();
+  const tryColor=opts.forceColor||colorSeen||(!found.some(f=>f.startsWith('QF:'))&&now-lastColorTry>300);
+  if(!needJs&&!tryColor)return found;
+  const sc=Math.min(1,maxDim/Math.max(w,h));cv.width=Math.round(w*sc);cv.height=Math.round(h*sc);
+  cx.imageSmoothingQuality='high';cx.drawImage(src,0,0,cv.width,cv.height);
+  const img=cx.getImageData(0,0,cv.width,cv.height);
+  if(needJs)found.push(...findMulti(img.data,img.width,img.height,2,opts.inv));
+  if(tryColor){
+    lastColorTry=now;const plain=new Set(found);
+    for(let c=0;c<3;c++)for(const t of findMulti(channel(img,c),img.width,img.height,2,opts.inv)){
+      if(t.startsWith('QF:')&&!plain.has(t))colorSeen=true;
+      found.push(t);
+    }
+  }
+  return found;
+}
+
+/* камера */
 let scanGen=0,lastScan=0;
 function startScan(){
   const g=++scanGen;
-  const tick=async(t)=>{
-    if(g!==scanGen||!stream)return;                 // этот цикл устарел — выходим
+  const tick=async t=>{
+    if(g!==scanGen||!stream)return;
     const v=$('video');
-    if(!busy&&v.readyState>=2&&t-lastScan>=60){     // не чаще ~16 раз в секунду
+    if(!busy&&v.readyState>=2&&t-lastScan>=60){
       busy=true;lastScan=t;
-      try{
-        if(detector){const codes=await detector.detect(v);if(g!==scanGen){busy=false;return}for(const c of codes)await handle(c.rawValue)}
-        else{const w=v.videoWidth,h=v.videoHeight,sc=Math.min(1,1000/Math.max(w,h));
-          cv.width=w*sc;cv.height=h*sc;cx.drawImage(v,0,0,cv.width,cv.height);
-          const d=decodeJsQR(cx.getImageData(0,0,cv.width,cv.height));if(d&&g===scanGen)await handle(d)}
-      }catch(e){}
+      try{const f=await detectAll(v,v.videoWidth,v.videoHeight,900);if(g===scanGen)for(const d of f)await handle(d)}catch(e){}
       busy=false;
     }
     if(g===scanGen)loop=requestAnimationFrame(tick);
@@ -298,40 +422,30 @@ function startScan(){
   loop=requestAnimationFrame(tick);
 }
 function stopScan(){scanGen++;cancelAnimationFrame(loop);busy=false}
-/* Выбор камеры: у телефонов с несколькими задними камерами Chrome иногда берёт телеобъектив (x3, x3.5).
-   Берём основную (обычно с наименьшим номером), сбрасываем цифровой зум, даём переключить вручную. */
+
 let backCams=[],camIdx=0;
 const camNum=l=>{const m=/camera2?\s*(\d+)/i.exec(l||'');return m?+m[1]:99};
 async function findBackCams(){
   const all=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput'&&d.deviceId);
-  let back=all.filter(d=>/back|rear|environment|задн/i.test(d.label));
-  if(!back.length)back=all;
+  let back=all.filter(d=>/back|rear|environment|задн/i.test(d.label));if(!back.length)back=all;
   return back.sort((a,b)=>camNum(a.label)-camNum(b.label));
 }
 async function openStream(deviceId){
   const base={width:{ideal:1920},height:{ideal:1080}};
-  const video=deviceId?{...base,deviceId:{exact:deviceId}}:{...base,facingMode:'environment'};
-  const st=await navigator.mediaDevices.getUserMedia({video,audio:false});
+  const st=await navigator.mediaDevices.getUserMedia({video:deviceId?{...base,deviceId:{exact:deviceId}}:{...base,facingMode:'environment'},audio:false});
   const tr=st.getVideoTracks()[0];
   try{const c=tr.getCapabilities?.();if(c&&c.zoom)await tr.applyConstraints({advanced:[{zoom:c.zoom.min}]})}catch(e){}
   return st;
 }
-async function attach(st){
-  if(stream)stream.getTracks().forEach(t=>t.stop());
-  stream=st;const v=$('video');v.srcObject=st;await v.play();
-}
-
+async function attach(st){if(stream)stream.getTracks().forEach(t=>t.stop());stream=st;const v=$('video');v.srcObject=st;await v.play()}
 $('cam').onclick=async()=>{
   if(stream){stopCam();return}
   if(!navigator.mediaDevices?.getUserMedia){toast('Камера тут недоступна — жми «С фото»');return}
   try{
     if(finished)resetRecv();
-    await attach(await openStream(null));                 // первый запуск — чтобы получить разрешение
+    await attach(await openStream(null));
     backCams=await findBackCams();
-    let saved=null;try{saved=localStorage.getItem('qrCam')}catch(e){}
-    let want=backCams.findIndex(d=>d.deviceId===saved);
-    if(want<0)want=0;
-    camIdx=want;
+    const saved=store.get('qrCam',null);let want=backCams.findIndex(d=>d.deviceId===saved);if(want<0)want=0;camIdx=want;
     const curId=stream.getVideoTracks()[0].getSettings().deviceId;
     if(backCams[want]&&backCams[want].deviceId!==curId){
       stream.getTracks().forEach(t=>t.stop());stream=null;
@@ -344,17 +458,12 @@ $('cam').onclick=async()=>{
 let switching=false;
 $('switchCam').onclick=async()=>{
   if(!stream||backCams.length<2||switching)return;
-  switching=true;$('switchCam').disabled=true;
-  stopScan();
+  switching=true;$('switchCam').disabled=true;stopScan();
   stream.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;
   for(let tries=0;tries<backCams.length;tries++){
     camIdx=(camIdx+1)%backCams.length;
-    try{
-      await attach(await openStream(backCams[camIdx].deviceId));
-      try{localStorage.setItem('qrCam',backCams[camIdx].deviceId)}catch(e){}
-      toast(`Камера ${camIdx+1} из ${backCams.length} — запомню`);
-      break;
-    }catch(e){}
+    try{await attach(await openStream(backCams[camIdx].deviceId));store.set('qrCam',backCams[camIdx].deviceId);
+      toast(`Камера ${camIdx+1} из ${backCams.length} — запомню`);break}catch(e){}
   }
   switching=false;$('switchCam').disabled=false;
   if(stream)startScan();else{stopCam();toast('Не удалось открыть камеру')}
@@ -362,42 +471,56 @@ $('switchCam').onclick=async()=>{
 function stopCam(){stopScan();if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
   show($('videoBox'),false);show($('switchCam'),false);$('cam').textContent='Включить камеру'}
 
-$('photoBtn').onclick=()=>$('photo').click();
-$('photo').onchange=async e=>{
+/* фото — из галереи или через «Поделиться» */
+async function decodeImages(blobs){
   if(finished)resetRecv();
   let found=0;
-  for(const f of e.target.files){
+  for(const f of blobs){
     try{
-      const bmp=await createImageBitmap(f);let d=null;
-      if(detector){const c=await detector.detect(bmp);if(c[0])d=c[0].rawValue}
-      if(!d){const big=Math.max(bmp.width,bmp.height);
-        for(const target of[1200,800,1800,600,2600]){
-          const sc=Math.min(1,target/big);cv.width=Math.round(bmp.width*sc);cv.height=Math.round(bmp.height*sc);
-          cx.imageSmoothingQuality='high';cx.drawImage(bmp,0,0,cv.width,cv.height);
-          d=decodeJsQR(cx.getImageData(0,0,cv.width,cv.height));if(d||(sc===1&&target>big))break}}
-      if(d){found++;await handle(d)}
+      const bmp=await createImageBitmap(f),big=Math.max(bmp.width,bmp.height);
+      let got=[];
+      if(detector){try{got=(await detector.detect(bmp)).map(c=>c.rawValue)}catch(e){}}
+      if(!got.length)for(const target of[1200,800,1800,600,2600]){
+        got=await detectAll(bmp,bmp.width,bmp.height,target,{skipDetector:true,forceColor:true,inv:'attemptBoth'});
+        if(got.length||target>=big)break;
+      }
+      for(const d of got){found++;await handle(d)}
     }catch(err){}
   }
-  e.target.value='';
   if(!found)toast('Не распознал. Сфоткай ровнее, без бликов и без зума');
-  else if(!finished&&D.R)toast(`Нужно ещё ${D.R.k-D.R.rank} — сфоткай любые другие коды`);
-};
+  else if(!finished&&D.R)toast(`Нужно ещё ${D.R.k-D.R.rank} — добавь любые другие коды`);
+}
+$('photoBtn').onclick=()=>$('photo').click();
+$('photo').onchange=async e=>{const files=[...e.target.files];e.target.value='';await decodeImages(files)};
+
 $('copy').onclick=async()=>{
   try{await navigator.clipboard.writeText($('out').value);toast('Скопировано')}
   catch(e){$('out').select();document.execCommand('copy');toast('Скопировано')}
 };
 $('again').onclick=resetRecv;
 
-/* ---------- приём из меню «Поделиться» ---------- */
-(function fromShare(){
-  const p=new URLSearchParams(location.search);
-  const parts=[p.get('title'),p.get('text'),p.get('url')].filter(Boolean);
-  const uniq=parts.filter((v,i)=>parts.indexOf(v)===i&&!parts.some((o,j)=>j!==i&&o!==v&&o.includes(v)));
+/* ---------- «Поделиться»: текст → отправка, картинки → приём ---------- */
+function sendText(parts){
+  const uniq=parts.filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i&&!a.some((o,j)=>j!==i&&o!==v&&o.includes(v)));
   if(!uniq.length)return;
+  goSend();S=null;show($('sendShow'),false);show($('sendInput'),true);
+  $('txt').value=uniq.join('\n');updatePlans().then(()=>$('make').click());
+}
+(async function fromShare(){
+  const p=new URLSearchParams(location.search);
+  if(!p.has('shared')&&!p.has('text')&&!p.has('url')&&!p.has('title'))return;
   history.replaceState(null,'',location.pathname);
-  $('txt').value=uniq.join('\n');updatePlan();
-  requestAnimationFrame(()=>$('make').click());
+  if(p.has('shared')&&'caches' in window){
+    const c=await caches.open('qr-share'),keys=await c.keys();
+    const tr=await c.match('./__share/text'),t=tr?await tr.json():{};
+    const imgs=[];for(const k of keys)if(k.url.includes('/__share/img'))imgs.push(await(await c.match(k)).blob());
+    for(const k of keys)await c.delete(k);
+    if(imgs.length){goRecv();await decodeImages(imgs);return}
+    sendText([t.title,t.text,t.url]);return;
+  }
+  sendText([p.get('title'),p.get('text'),p.get('url')]);
 })();
+updatePlans();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>
 </body>
