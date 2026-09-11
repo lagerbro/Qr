@@ -556,7 +556,7 @@ function calibFinish(){
   if(best===rows[rows.length-1]&&best.share>0.9)$('calibNote').textContent+=' Камера успевает даже на самой высокой скорости — попробуй больше кодов в кадре или размер кода крупнее и проверь снова.';
   $('calibTable').innerHTML='<tr><th>Смена кадра</th><th>Поймано</th><th>Кодов/с</th></tr>'+
     rows.map(r=>`<tr${r===best?' class="best"':''}><td>${fmt(r.ms/1000,2)} с</td><td>${Math.round(r.share*100)}%</td><td>${fmt(r.rate)}</td></tr>`).join('');
-  show($('calibResult'),true);$('recvStatus').textContent='Проверка скорости закончена';navigator.vibrate?.([60,60,60]);
+  show($('calibResult'),true);$('recvStatus').textContent='Проверка скорости закончена'+diagText();navigator.vibrate?.([60,60,60]);
 }
 $('calibDone').onclick=()=>{CB=null;resetRecv()};
 
