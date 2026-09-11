@@ -620,12 +620,13 @@ async function detectAll(src,w,h,maxDim,opts={}){
 
 /* камера: каждый новый кадр видео — в свободный детектор. Встроенный (Android) стоит ~210 мс за вызов независимо от размера
    кадра (OnePlus 15: окно 39% и 82% — те же 209–227 мс, замер 11.09.2026), то есть не больше ~4,5 проверок/с, и ждёт он
-   вне главного потока. jsQR тем временем проверяет кадры на главном потоке; результаты обоих идут в один декодер,
-   повторы отсеивает feed. Режим переключается кнопкой и запоминается. */
-const DET_NAMES={both:'встроенный + jsQR',native:'встроенный',jsqr:'jsQR'};
-let detMode=store.get('qrDet','both');if(!DET_NAMES[detMode])detMode='both';
+   вне главного потока. Режим «оба» на OnePlus 15 оказался хуже одиночного встроенного: jsQR занимает главный поток на 300 мс,
+   встроенный ждёт его, чтобы отдать результат, — 4,3/с падает до 2,9/с, а сам jsQR ловит 0,3–2 кода/с (замер 11.09.2026).
+   Поэтому по умолчанию встроенный, остальное — руками кнопкой, выбор запоминается. */
+const DET_NAMES={native:'встроенный',jsqr:'jsQR',both:'встроенный + jsQR'};
+let detMode=store.get('qrDet','native');if(!DET_NAMES[detMode])detMode='native';
 function showDet(){$('detBtn').textContent='Распознавание: '+DET_NAMES[detector?detMode:'jsqr']}
-$('detBtn').onclick=()=>{detMode=detMode==='both'?'native':detMode==='native'?'jsqr':'both';store.set('qrDet',detMode);showDet();if(stream)startScan()};
+$('detBtn').onclick=()=>{detMode=detMode==='native'?'jsqr':detMode==='jsqr'?'both':'native';store.set('qrDet',detMode);showDet();if(stream)startScan()};
 let scanGen=0,busyN=false;
 function startScan(){
   const g=++scanGen,v=$('video'),useVFC='requestVideoFrameCallback' in HTMLVideoElement.prototype;tracks=[];diagReset();busy=busyN=false;
