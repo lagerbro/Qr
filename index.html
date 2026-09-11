@@ -83,8 +83,8 @@
     <label class="field">Размер одного кода
       <select id="size">
         <option value="150">Очень маленький</option>
-        <option value="300">Маленький</option>
-        <option value="600">Средний</option>
+        <option value="332">Маленький</option>
+        <option value="620">Средний</option>
       </select>
     </label>
     <label class="field">Кодов в кадре
@@ -212,12 +212,14 @@ function maskFor(seed,k,id){
   return m}
 
 // Заголовок 20 байт: версия, флаги, id, k, размер куска, длина данных, зерно, CRC32 содержимого
-function packet(S,seed){
+// Флаги: бит 0 — сжато; биты 1–2 — кодов в кадре (1→1, 2→2, 3→4; 0 — неизвестно), подсказка приёмнику, где искать соседей
+function packet(S,seed,N){
   const m=maskFor(seed,S.k,S.id),p=new Uint8Array(HDR+S.B),d=p.subarray(HDR),v=new DataView(p.buffer);
   if(seed<S.k)d.set(S.blocks[seed]);
   else for(let i=0;i<S.k;i++)if(hasBit(m,i)){const b=S.blocks[i];for(let j=0;j<S.B;j++)d[j]^=b[j]}
-  p[0]=VER;p[1]=S.flags;v.setUint16(2,S.id);v.setUint16(4,S.k);v.setUint16(6,S.B);v.setUint32(8,S.len);v.setUint32(12,seed>>>0);v.setUint32(16,S.crc);
+  p[0]=VER;p[1]=S.flags|(N===4?6:N===2?4:2);v.setUint16(2,S.id);v.setUint16(4,S.k);v.setUint16(6,S.B);v.setUint32(8,S.len);v.setUint32(12,seed>>>0);v.setUint32(16,S.crc);
   return'QF:'+b45enc(p)}
+const hintN=str=>{try{return[0,1,2,4][(b45dec(str.slice(3,6))[1]>>1)&3]}catch(e){return 0}}; // первые 3 символа = байты 0–1 заголовка
 
 // Сборка: метод Гаусса с XOR. Новый код сразу очищается от всех известных частей,
 // поэтому в конце почти нечего досчитывать даже при тысячах частей.
@@ -289,7 +291,7 @@ $('tabSend').onclick=goSend;$('tabRecv').onclick=goRecv;
 
 /* ---------- настройки ---------- */
 let speed=store.get('qrSpeed',0.5);if(!(speed>=0.08&&speed<=3))speed=0.5;
-for(const [id,key,def] of [['size','qrSize','300'],['per','qrPer','2']]){$(id).value=String(store.get(key,def));if(!$(id).value)$(id).value=def}
+for(const [id,key,def] of [['size','qrSize','332'],['per','qrPer','2']]){$(id).value=String(store.get(key,def));if(!$(id).value)$(id).value=def}
 function showSpeed(){document.querySelectorAll('.speed').forEach(r=>r.value=speed);
   document.querySelectorAll('.speedVal').forEach(b=>b.textContent=fmt(speed,2)+' с')}
 showSpeed();
@@ -345,7 +347,9 @@ const need=k=>k===1?1:k+1;
 function estFor(P,B,N){if(!P||P.plain)return null;const k=countParts(P,B),frames=Math.ceil(need(k)/N);
   return{k,frames,sec:frames*speed,kbs:P.rawLen/1024/(frames*speed),tooBig:k>MAX_K}}
 const estText=e=>!e?'':e.tooBig?'слишком много частей':`≈ ${dur(e.sec)}`;
-const SIZE_NAMES={150:'Очень маленький',300:'Маленький',600:'Средний'},PER_NAMES={1:'1',2:'2 — рядом',4:'4 — сеткой 2×2'};
+// Байт в куске — под завязку версии QR на уровне Q с учётом заголовка (20 байт) и префикса «QF:»:
+// V11 → 150, V17 → 332, V24 → 620 (замер 11.09.2026). Меньше — ёмкость версии пропадает, больше — версия выше и код мельче.
+const SIZE_NAMES={150:'Очень маленький',332:'Маленький',620:'Средний'},PER_NAMES={1:'1',2:'2 — рядом',4:'4 — сеткой 2×2'};
 let photoPacks={};
 async function photoOptions(){ // оценка для каждого варианта фото
   if(!file||!file.isImage)return;
@@ -394,25 +398,35 @@ function drawFrame(strs,mode){
         if(dark&&run<0)run=k;else if(!dark&&run>=0){x.fillRect(ox+run*s,oy+r*s,(k-run)*s,s);run=-1}}}});
   return c;
 }
-function paint(strs,mode){const box=$('qrBox');box.innerHTML='';const c=drawFrame(strs,mode);if(c)box.appendChild(c)}
+function put(c){const box=$('qrBox');box.innerHTML='';if(c)box.appendChild(c)}
+function paint(strs,mode){dropPre();put(drawFrame(strs,mode))}
+// Следующий кадр рисуется заранее, пока показывается текущий: интервал между кадрами становится max(скорость, отрисовка),
+// а не их суммой. Один код «Среднего» размера — ~14 мс на десктопе (замер 11.09.2026), на телефоне в разы больше.
+// rAF → setTimeout: сначала браузер выводит текущий кадр на экран, и только потом главный поток занимается следующим.
+let pre=null,preSeq=0; // pre = {key, canvas}
+function dropPre(){pre=null;preSeq++}
+function prepare(key,make){const my=++preSeq;pre=null;requestAnimationFrame(()=>setTimeout(()=>{if(my===preSeq)pre={key,canvas:make()}}))}
+function paintPre(key,make){put(pre&&pre.key===key?pre.canvas:make());pre=null}
 
 /* ---------- отправка ---------- */
 let cur=0,N=1,autoTimer=null,wake=null;
+const frameAt=at=>{const strs=[];for(let i=0;i<N;i++)strs.push(packet(S,at+i,N));return drawFrame(strs,'Alphanumeric')};
 function renderPart(){
   if(S.plain){paint([S.plain],'Byte');$('partLabel').textContent='Один код';
     $('sendNote').textContent='Этот код прочитает и обычная камера телефона.';
     $('prev').disabled=$('next').disabled=$('auto').disabled=true;return}
-  const strs=[];for(let i=0;i<N;i++)strs.push(packet(S,cur+i));paint(strs,'Alphanumeric');
+  paintPre(cur,()=>frameAt(cur));
   const last=Math.min(cur+N,S.k);
   $('partLabel').textContent=N===1?(cur<S.k?`Часть ${cur+1} из ${S.k}`:`Доп. код ${cur-S.k+1}`)
     :`Кадр ${cur/N+1}`+(cur<S.k?` · части ${cur+1}–${last} из ${S.k}`:' · доп. коды');
   $('prev').disabled=cur===0;$('next').disabled=false;$('auto').disabled=false;
+  if(autoTimer)prepare(cur+N,()=>frameAt(cur+N));
 }
 function showSendScreen(){show($('sendInput'),false);show($('sendShow'),true);show($('navRow'),true);show($('auto'),true);keepAwake()}
 $('make').onclick=async()=>{
   if(!packed)return;
   const B=+$('size').value;N=packed.plain?1:+$('per').value;
-  S=split(packed,B);if(S.tooBig)return;cur=0;
+  S=split(packed,B);if(S.tooBig)return;cur=0;dropPre();
   const e=estFor(packed,B,N);
   $('sendNote').textContent=S.plain?'':'Выкрути яркость на максимум. Сначала идут части по порядку, дальше — смеси, которые заменяют любую пропущенную.'+(e?` В идеале ${dur(e.sec)}.`:'');
   showSendScreen();renderPart();
@@ -422,8 +436,9 @@ $('prev').onclick=()=>{stopAuto();step(-1)};
 $('next').onclick=()=>{stopAuto();step(1)};
 $('qrBox').onclick=()=>{if(S&&!S.plain&&!calibRun){stopAuto();step(1)}};
 $('auto').onclick=()=>{if(autoTimer)stopAuto();else{$('auto').textContent='Остановить';startAuto()}};
-function startAuto(){clearTimeout(autoTimer);const tick=()=>{step(1);autoTimer=setTimeout(tick,speed*1000)};autoTimer=setTimeout(tick,speed*1000)}
-function stopAuto(){clearTimeout(autoTimer);autoTimer=null;$('auto').textContent='Листать сами'}
+function startAuto(){clearTimeout(autoTimer);const tick=()=>{step(1);autoTimer=setTimeout(tick,speed*1000)};autoTimer=setTimeout(tick,speed*1000);
+  if(S&&!S.plain)prepare(cur+N,()=>frameAt(cur+N))}
+function stopAuto(){clearTimeout(autoTimer);autoTimer=null;dropPre();$('auto').textContent='Листать сами'}
 $('back').onclick=()=>{stopAuto();stopCalib();releaseWake();S=null;show($('sendShow'),false);show($('sendInput'),true);renderEstimates()};
 async function keepAwake(){try{wake=await navigator.wakeLock?.request('screen')}catch(e){}}
 function releaseWake(){try{wake?.release()}catch(e){}wake=null}
@@ -444,15 +459,16 @@ $('calib').onclick=()=>{
   $('sendNote').textContent='Держи экран перед камерой второго телефона (он должен быть на «Принять» с включённой камерой). Проверка идёт ~20 секунд, результат появится на втором телефоне.';
   keepAwake();
   const total=plan.reduce((a,p)=>a+p.ms,0);let elapsed=0;
+  const c=calibRun;
+  const frameOf=i=>{const p=c.plan[i],strs=[];for(let j=0;j<c.N;j++)strs.push(testPacket(c.run,p.li,p.idx+j,p.ms,p.frames,c.N,LEVELS.length,c.B));return drawFrame(strs,'Alphanumeric')};
   const tick=()=>{
-    if(!calibRun)return;
-    const c=calibRun;
+    if(calibRun!==c)return;
     if(c.i<c.plan.length){
-      const p=c.plan[c.i++];elapsed+=p.ms;
-      const strs=[];for(let j=0;j<c.N;j++)strs.push(testPacket(c.run,p.li,p.idx+j,p.ms,p.frames,c.N,LEVELS.length,c.B));
-      paint(strs,'Alphanumeric');
+      const i=c.i++,p=c.plan[i];elapsed+=p.ms;
+      paintPre(i,()=>frameOf(i));
       $('partLabel').textContent=`Проверка: ${fmt(p.ms/1000,2)} с · ${Math.round(elapsed/total*100)}%`;
       c.timer=setTimeout(tick,p.ms);
+      if(i+1<c.plan.length)prepare(i+1,()=>frameOf(i+1));
     }else if(c.i<c.plan.length+1){
       c.i++;const strs=[];for(let j=0;j<c.N;j++)strs.push(testPacket(c.run,255,j,0,0,c.N,LEVELS.length,c.B));
       paint(strs,'Alphanumeric');$('partLabel').textContent='Проверка закончена';
@@ -462,13 +478,13 @@ $('calib').onclick=()=>{
   };
   tick();
 };
-function stopCalib(){if(calibRun){clearTimeout(calibRun.timer);calibRun=null}}
+function stopCalib(){if(calibRun){clearTimeout(calibRun.timer);calibRun=null;dropPre()}}
 
 /* ---------- приём ---------- */
 let D=newDecoder(),stream=null,detector=null,busy=false,finished=false,received=null;
 if('BarcodeDetector' in window){try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){}}
 
-function resetRecv(){D=newDecoder();finished=false;received=null;show($('result'),false);show($('calibResult'),false);show($('bar'),false);$('barFill').style.width='0';
+function resetRecv(){D=newDecoder();finished=false;received=null;tracks=[];expectN=0;show($('result'),false);show($('calibResult'),false);show($('bar'),false);$('barFill').style.width='0';
   $('recvStatus').textContent='Включи камеру и наведи её на коды с другого телефона.'}
 function showResult(payload,info){
   finished=true;stopCam();received=payload;show($('result'),true);$('stats').textContent=info||'';
@@ -493,7 +509,7 @@ async function handle(data){
   if(data.startsWith('QK:')){calibFeed(data);return}
   if(finished)return;
   if(data.startsWith('QF:')){
-    const st=feed(D,data);
+    expectN=hintN(data)||expectN;const st=feed(D,data);
     if(st==='new'&&D.hadOther)toast('Новая передача — начинаю заново');
     if(st==='useful'||st==='new'){
       D.hadOther=true;const R=D.R;if(!R.t0)R.t0=performance.now();
@@ -516,7 +532,7 @@ async function handle(data){
 /* ---------- подбор скорости: приёмник ---------- */
 let CB=null;
 function calibFeed(str){
-  const t=parseTest(str);if(!t)return;
+  const t=parseTest(str);if(!t)return;expectN=t.N;
   if(!CB||CB.run!==t.run){CB={run:t.run,levels:{},N:t.N,total:t.levels,done:false};show($('result'),false);show($('calibResult'),false)}
   if(CB.done)return;
   if(t.level===255){calibFinish();return}
@@ -541,45 +557,70 @@ $('calibDone').onclick=()=>{CB=null;resetRecv()};
 
 /* ---------- распознавание ---------- */
 function resultText(r){if(/^Q[FK]:/.test(r.data))return r.data;try{return dec.decode(new Uint8Array(r.binaryData))}catch(e){return r.data}}
-function scanOnce(data,w,h,max,inv){
-  const out=[];
-  for(let n=0;n<max;n++){
-    const r=jsQR(data,w,h,{inversionAttempts:inv||'dontInvert'});if(!r)break;out.push(resultText(r));
-    if(n+1>=max)break;
-    const L=r.location,xs=[L.topLeftCorner.x,L.topRightCorner.x,L.bottomLeftCorner.x,L.bottomRightCorner.x],ys=[L.topLeftCorner.y,L.topRightCorner.y,L.bottomLeftCorner.y,L.bottomRightCorner.y];
-    const x0=Math.max(0,Math.floor(Math.min(...xs))-6),x1=Math.min(w-1,Math.ceil(Math.max(...xs))+6),y0=Math.max(0,Math.floor(Math.min(...ys))-6),y1=Math.min(h-1,Math.ceil(Math.max(...ys))+6);
-    for(let y=y0;y<=y1;y++)data.fill(255,(y*w+x0)*4,(y*w+x1+1)*4);
-  }
-  return out;
-}
 function crop(data,w,x0,y0,x1,y1){const cw=x1-x0,ch=y1-y0,o=new Uint8ClampedArray(cw*ch*4);for(let y=0;y<ch;y++)o.set(data.subarray(((y+y0)*w+x0)*4,((y+y0)*w+x1)*4),y*cw*4);return o}
-function findMulti(data,w,h,inv){ // запасной путь, если в браузере нет встроенного распознавания
-  const res=new Set(scanOnce(new Uint8ClampedArray(data),w,h,4,inv));
-  if(res.size>=4)return[...res];
-  const ox=Math.round(w*0.04),oy=Math.round(h*0.04),hw=w>>1,hh=h>>1;
-  const regions=[[0,0,hw+ox,h],[hw-ox,0,w,h],[0,0,hw+ox,hh+oy],[hw-ox,0,w,hh+oy],[0,hh-oy,hw+ox,h],[hw-ox,hh-oy,w,h]];
-  for(const[x0,y0,x1,y1]of regions)for(const t of scanOnce(crop(data,w,x0,y0,x1,y1),x1-x0,y1-y0,1,inv))res.add(t);
-  return[...res];
-}
+// jsQR читает один код за вызов и путается, когда в окне видны finder-паттерны двух кодов.
+// Поэтому: помним, где стояли коды в прошлом кадре, и сканируем окна вокруг них; соседей ищем
+// по раскладке отправителя (шаг = код + 4 модуля просвета); найденный код закрашиваем белым,
+// чтобы он не мешал искать остальные. Окно может выходить за код на 10 модулей — jsQR ещё
+// читает, на 12 (виден целый finder соседа) уже нет; берём запас 8 (замер 11.09.2026).
+let tracks=[],expectN=0;  // expectN — кодов в кадре по заголовку отправителя; 0 — неизвестно
+// Окна разведки (доли кадра: x, y, ширина, высота). Окно ловит код, если код в нём целиком, а от соседа
+// видно меньше 7 модулей, поэтому окна идут со сдвигом; порядок — от вероятных к редким.
+const OFF=[0,.5,.25,.1,.4,.15,.35,.2,.3,.05,.45];
+const WIN2=OFF.map(x=>[x,0,.5,1]);                                   // два кода рядом: полкадра во всю высоту
+const WIN4=[];for(let s=0;s<9;s++)for(let i=0;i<5;i++)if(s-i>=0&&s-i<5)WIN4.push([OFF[s-i],OFF[i],.5,.5]); // сетка 2×2: четверти, сначала ровные
+let winAt=0;
+function boxOf(r,dx,dy){const L=r.location,xs=[L.topLeftCorner.x,L.topRightCorner.x,L.bottomLeftCorner.x,L.bottomRightCorner.x],ys=[L.topLeftCorner.y,L.topRightCorner.y,L.bottomLeftCorner.y,L.bottomRightCorner.y];
+  const x0=Math.min(...xs)+dx,x1=Math.max(...xs)+dx,y0=Math.min(...ys)+dy,y1=Math.max(...ys)+dy;
+  return{x0,y0,x1,y1,mod:Math.max(x1-x0,y1-y0)/(4*r.version+17)}}
+function scanBox(img,w,h,b,m,inv){ // jsQR в окне вокруг рамки b с запасом m пикселей
+  const x0=Math.max(0,Math.floor(b.x0-m)),y0=Math.max(0,Math.floor(b.y0-m)),x1=Math.min(w,Math.ceil(b.x1+m)),y1=Math.min(h,Math.ceil(b.y1+m));
+  if(x1-x0<21||y1-y0<21)return null;
+  const whole=!x0&&!y0&&x1===w&&y1===h;
+  const r=jsQR(whole?img:crop(img,w,x0,y0,x1,y1),x1-x0,y1-y0,{inversionAttempts:inv||'dontInvert'});
+  return r?{text:resultText(r),box:boxOf(r,x0,y0)}:null}
+function whiteOut(img,w,h,b,m){const x0=Math.max(0,Math.floor(b.x0-m)),x1=Math.min(w-1,Math.ceil(b.x1+m)),y0=Math.max(0,Math.floor(b.y0-m)),y1=Math.min(h-1,Math.ceil(b.y1+m));
+  for(let y=y0;y<=y1;y++)img.fill(255,(y*w+x0)*4,(y*w+x1+1)*4)}
+function findMulti(data,w,h,inv,track){ // data портится (закраска) — вызывать на свежей копии
+  const want=expectN||4,found=new Map(),queue=[];
+  const add=r=>{if(!r||found.has(r.text))return false;found.set(r.text,r);queue.push(r.box);whiteOut(data,w,h,r.box,2*r.box.mod);return true};
+  const whole={x0:0,y0:0,x1:w,y1:h};
+  if(track)for(const t of tracks){if(found.size>=want)break;add(scanBox(data,w,h,t,8*t.mod,inv))}
+  if(!found.size){ // разведка: полный кадр, потом окна в полкадра; с камеры — по 3 окна на кадр по кругу
+    add(scanBox(data,w,h,whole,0,inv));
+    const all=expectN===2?WIN2:expectN===4?WIN4:WIN2.concat(WIN4);
+    const wins=track?[0,1,2].map(()=>all[winAt++%all.length]):expectN?all:WIN2.slice(0,2).concat(WIN4.slice(0,6)); // фото: разом, но без экзотики
+    for(const[fx,fy,fw,fh]of wins){if(found.size)break;add(scanBox(data,w,h,{x0:fx*w,y0:fy*h,x1:(fx+fw)*w,y1:(fy+fh)*h},0,inv))}
+  }
+  const dirs=want===2?[[1,0],[-1,0]]:[[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
+  while(queue.length&&found.size<want){ // соседи найденного по раскладке отправителя
+    const b=queue.shift(),W=b.x1-b.x0+4*b.mod,H=b.y1-b.y0+4*b.mod;
+    for(const[dx,dy]of dirs){if(found.size>=want)break;
+      const nb={x0:b.x0+dx*W,x1:b.x1+dx*W,y0:b.y0+dy*H,y1:b.y1+dy*H},cx=(nb.x0+nb.x1)/2,cy=(nb.y0+nb.y1)/2;
+      if(cx<0||cy<0||cx>w||cy>h)continue;
+      let taken=false;for(const f of found.values()){const o=f.box;if(o.x0<=cx&&cx<=o.x1&&o.y0<=cy&&cy<=o.y1){taken=true;break}}
+      if(!taken)add(scanBox(data,w,h,nb,8*b.mod,inv))}}
+  if(track)tracks=[...found.values()].map(f=>f.box);
+  return[...found.keys()]}
 const cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});
 async function detectAll(src,w,h,maxDim,opts={}){
   if(detector&&!opts.skipDetector){try{return(await detector.detect(src)).map(c=>c.rawValue)}catch(e){return[]}}
   const sc=Math.min(1,maxDim/Math.max(w,h));cv.width=Math.round(w*sc);cv.height=Math.round(h*sc);
   cx.imageSmoothingQuality='high';cx.drawImage(src,0,0,cv.width,cv.height);
   const img=cx.getImageData(0,0,cv.width,cv.height);
-  return findMulti(img.data,img.width,img.height,opts.inv);
+  return findMulti(img.data,img.width,img.height,opts.inv,opts.track);
 }
 
 /* камера: обрабатываем каждый новый кадр видео ровно один раз */
 let scanGen=0;
 function startScan(){
-  const g=++scanGen,v=$('video'),useVFC='requestVideoFrameCallback' in HTMLVideoElement.prototype;
+  const g=++scanGen,v=$('video'),useVFC='requestVideoFrameCallback' in HTMLVideoElement.prototype;tracks=[];
   const next=()=>{if(g===scanGen)useVFC?v.requestVideoFrameCallback(tick):requestAnimationFrame(tick)};
   const tick=async()=>{
     if(g!==scanGen||!stream)return;
     if(!busy&&v.readyState>=2){
       busy=true;
-      try{const f=await detectAll(v,v.videoWidth,v.videoHeight,1000);if(g===scanGen)for(const d of f)await handle(d)}catch(e){}
+      try{const f=await detectAll(v,v.videoWidth,v.videoHeight,1000,{track:true});if(g===scanGen)for(const d of f)await handle(d)}catch(e){}
       busy=false;
     }
     next();
