@@ -500,8 +500,13 @@ function showResult(payload,info){
   }
   $('recvStatus').textContent='Готово — получено и проверено';navigator.vibrate?.([60,60,60]);
 }
+// Диагностика камеры: сколько кадров видео пришло, сколько из них проверено, сколько мс уходит на detect, сколько кодов поймано (с повторами)
+const diag={t0:0,frames:0,scans:0,ms:0,codes:0};
+function diagReset(){diag.t0=performance.now();diag.frames=diag.scans=diag.ms=diag.codes=0}
+function diagText(){const t=(performance.now()-diag.t0)/1000;if(!diag.scans||t<0.5)return'';
+  return` · камера ${fmt(diag.frames/t,0)} кадр/с, проверено ${fmt(diag.scans/t,0)}/с, detect ${fmt(diag.ms/diag.scans,0)} мс, кодов ${fmt(diag.codes/t)}/с`}
 function liveStatus(){const R=D.R;if(!R)return;const t=R.t0?(performance.now()-R.t0)/1000:0;
-  $('recvStatus').textContent=`Собрано ${R.rank} из ${R.k} · ${fmt(t)} с`}
+  $('recvStatus').textContent=`Собрано ${R.rank} из ${R.k} · ${fmt(t)} с${diagText()}`}
 setInterval(()=>{if(D.R&&!finished&&D.R.rank)liveStatus()},250);
 
 async function handle(data){
@@ -517,7 +522,7 @@ async function handle(data){
       if(R.rank===R.k){
         const t=(performance.now()-R.t0)/1000,codes=R.seen.size;$('recvStatus').textContent='Проверяю…';
         try{const r=await solve(D);
-          showResult(r.payload,`За ${dur(t)} · ${fmt(r.bytes/1024/Math.max(t,0.05),2)} КБ/с · поймано кодов: ${codes}, нужно было ${R.k}`);
+          showResult(r.payload,`За ${dur(t)} · ${fmt(r.bytes/1024/Math.max(t,0.05),2)} КБ/с · поймано кодов: ${codes}, нужно было ${R.k}${diagText()}`);
         }catch(e){
           toast('Повреждено при распознавании — принимаю заново');D=newDecoder();$('barFill').style.width='0';
           $('recvStatus').innerHTML='<span class="bad">Проверка не прошла — какой-то код распознан с ошибкой.</span> Держи камеру дальше, соберу заново.';
@@ -537,7 +542,7 @@ function calibFeed(str){
   if(CB.done)return;
   if(t.level===255){calibFinish();return}
   const L=CB.levels[t.level]||(CB.levels[t.level]={ms:t.interval,frames:t.frames,got:new Set()});L.got.add(t.idx);
-  $('recvStatus').textContent=`Проверка скорости: ${fmt(t.interval/1000,2)} с · поймано ${L.got.size} из ${t.frames*CB.N}`;
+  $('recvStatus').textContent=`Проверка скорости: ${fmt(t.interval/1000,2)} с · поймано ${L.got.size} из ${t.frames*CB.N}${diagText()}`;
   clearTimeout(CB.timer);CB.timer=setTimeout(calibFinish,3000);   // если конец не поймали — считаем по паузе
 }
 function calibFinish(){
@@ -614,13 +619,15 @@ async function detectAll(src,w,h,maxDim,opts={}){
 /* камера: обрабатываем каждый новый кадр видео ровно один раз */
 let scanGen=0;
 function startScan(){
-  const g=++scanGen,v=$('video'),useVFC='requestVideoFrameCallback' in HTMLVideoElement.prototype;tracks=[];
+  const g=++scanGen,v=$('video'),useVFC='requestVideoFrameCallback' in HTMLVideoElement.prototype;tracks=[];diagReset();
   const next=()=>{if(g===scanGen)useVFC?v.requestVideoFrameCallback(tick):requestAnimationFrame(tick)};
   const tick=async()=>{
     if(g!==scanGen||!stream)return;
+    diag.frames++;
     if(!busy&&v.readyState>=2){
-      busy=true;
-      try{const f=await detectAll(v,v.videoWidth,v.videoHeight,1000,{track:true});if(g===scanGen)for(const d of f)await handle(d)}catch(e){}
+      busy=true;const t=performance.now();
+      try{const f=await detectAll(v,v.videoWidth,v.videoHeight,1000,{track:true});diag.scans++;diag.ms+=performance.now()-t;diag.codes+=f.length;
+        if(g===scanGen)for(const d of f)await handle(d)}catch(e){}
       busy=false;
     }
     next();
@@ -644,18 +651,23 @@ async function openStream(deviceId){
   return st;
 }
 async function attach(st){if(stream)stream.getTracks().forEach(t=>t.stop());stream=st;const v=$('video');v.srcObject=st;await v.play()}
+// На части Android камера ещё «занята» после прошлого закрытия и первый getUserMedia падает — одна повторная попытка через паузу.
+// Отказ в разрешении не повторяем.
+async function openFirst(){try{return await openStream(null)}catch(e){if(e.name==='NotAllowedError')throw e;await new Promise(r=>setTimeout(r,500));return openStream(null)}}
 $('cam').onclick=async()=>{
   if(stream){stopCam();return}
   if(!navigator.mediaDevices?.getUserMedia){toast('Камера тут недоступна — жми «С фото»');return}
   try{
     if(finished||CB?.done){CB=null;resetRecv()}
-    await attach(await openStream(null));
+    await attach(await openFirst());
     backCams=await findBackCams();
-    const saved=store.get('qrCam',null);let want=backCams.findIndex(d=>d.deviceId===saved);if(want<0)want=0;camIdx=want;
-    const curId=stream.getVideoTracks()[0].getSettings().deviceId;
-    if(backCams[want]&&backCams[want].deviceId!==curId){
+    const saved=store.get('qrCam',null),curId=stream.getVideoTracks()[0].getSettings().deviceId;
+    camIdx=Math.max(0,backCams.findIndex(d=>d.deviceId===curId));
+    // Переоткрываем поток только ради камеры, которую пользователь выбрал сам: лишнее закрытие-открытие — лишний шанс на «занято»
+    const want=backCams.findIndex(d=>d.deviceId===saved);
+    if(want>=0&&backCams[want].deviceId!==curId){
       stream.getTracks().forEach(t=>t.stop());stream=null;
-      try{await attach(await openStream(backCams[want].deviceId))}catch(e){await attach(await openStream(null))}
+      try{await attach(await openStream(backCams[want].deviceId));camIdx=want}catch(e){await attach(await openFirst());camIdx=Math.max(0,backCams.findIndex(d=>d.deviceId===stream.getVideoTracks()[0].getSettings().deviceId))}
     }
     show($('videoBox'),true);show($('switchCam'),backCams.length>1);
     $('cam').textContent='Выключить камеру';startScan();
